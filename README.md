@@ -1,4 +1,4 @@
-# kea-leases-to-json
+# Kea Leases to JSON
 
 A Python tool to convert [ISC Kea](https://kea.readthedocs.io/) DHCP leases files to JSON format.  
 Supports both IPv4 and IPv6 leases. Includes a directory watcher for real-time conversion.
