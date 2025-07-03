@@ -1,0 +1,21 @@
+[project]
+name = "kea-leases-to-json"
+version = "0.1.0"
+description = "Convert Kea DHCP leases to JSON format"
+readme = "README.md"
+requires-python = ">=3.7"
+authors = [{ name = "Junior", email = "cjuniorfox@gmail.com" }]
+license = { text = "GNU General Public License v3.0 (GPLv3)" }
+keywords = ["kea", "dhcp", "leases", "json"]
+dependencies = ["watchdog", "pytest"]
+
+[project.urls]
+Homepage = "http://github.com/cjuniorfox/kea-leases-to-json"
+
+[project.scripts]
+kea-leases-to-json = "kea_leases_to_json.cli:main"
+
+
+
+[build-system]
+requires = ["setuptools", "wheel"]
