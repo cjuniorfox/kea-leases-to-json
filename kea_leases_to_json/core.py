@@ -10,6 +10,8 @@ class DirChangeHandler(FileSystemEventHandler):
         logging.debug(f"DirChangeHandler initialized with source: {source_dir}, target: {target_file}, extension: {extension}")
 
     def on_any_event(self, event):
+        logging.debug(f"Event detected: {event.event_type} on {event.src_path}")
+        # Handle only specific events
         if event.event_type  in ("created", "modified", "deleted"):
             logging.debug(f"Event {event.event_type} trigged.")
             # Only act on file changes, not directory events
