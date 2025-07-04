@@ -39,11 +39,18 @@ kea-leases-to-json --source /path/to/kea/leases/dir --target /path/to/output.jso
 - `--source` (required): Directory containing Kea lease CSV files
 - `--target` (required): Output JSON file path
 - `--log-level`: Logging level (default: INFO)
+- `--extension`: The extension for the file. Defaults to `.csv` 
+- `--single-run`: As defaults, this script starts a watcher for any file change. With this parameter, runs once and exits out.
 
 ## Example
 
 ```bash
-kea-leases-to-json --source ./leases --target ./leases.json --log-level DEBUG
+kea-leases-to-json \
+  --source ./leases \
+  --target ./leases.json \
+  --log-level DEBUG \
+  --extension .csv \
+  --single-run
 ```
 
 ## License
