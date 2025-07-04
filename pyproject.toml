@@ -17,8 +17,7 @@ kea-leases-to-json = "kea_leases_to_json.cli:main"
 
 [project.optional-dependencies]
 test = [
-    "pytest",
-    "tempfile"
+    "pytest"
 ]
 
 [tool.pytest.ini_options]
