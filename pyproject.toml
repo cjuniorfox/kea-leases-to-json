@@ -1,6 +1,6 @@
 [project]
 name = "kea-leases-to-json"
-version = "0.1.0"
+version = "0.1.1"
 description = "Convert Kea DHCP leases to JSON format"
 readme = "README.md"
 requires-python = ">=3.7"
@@ -15,7 +15,15 @@ Homepage = "http://github.com/cjuniorfox/kea-leases-to-json"
 [project.scripts]
 kea-leases-to-json = "kea_leases_to_json.cli:main"
 
+[project.optional-dependencies]
+test = [
+    "pytest",
+    "tempfile"
+]
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py",]
 
 [build-system]
 requires = ["setuptools", "wheel"]
