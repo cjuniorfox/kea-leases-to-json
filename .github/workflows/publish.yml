@@ -1,4 +1,4 @@
-name: Publish to PyPI
+name: Publish Python 🐍 distribution 📦 to PyPI on release
 
 on:
   release:
@@ -20,7 +20,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.x"
+          python-version: "3.12"
 
       - name: Install dependencies
         run: |
@@ -32,12 +32,16 @@ jobs:
         run: |
           pytest
 
+      - name: Set version in pyproject.toml to match GitHub release
+        run: |
+          RELEASE_VERSION=${{ github.event.release.tag_name }}
+          # Remove leading 'v' if present (e.g., v1.2.3 -> 1.2.3)
+          RELEASE_VERSION=${RELEASE_VERSION#v}
+          sed -i "s/^version = \".*\"/version = \"$RELEASE_VERSION\"/" pyproject.toml
+          sed -i "s/^__version__ = \".*\"/__version__ = \"$RELEASE_VERSION\"/" kea_leases_to_json/__init__.py
+
       - name: Build package
         run: python -m build
 
       - name: Publish to PyPI
-        env:
-          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
-          TWINE_USERNAME: __token__
-        run: |
-          python -m twine upload dist/*
+        uses: pypa/gh-action-pypi-publish@release/v1

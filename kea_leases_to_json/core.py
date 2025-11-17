@@ -1,28 +1,4 @@
 import json, csv, os, sys, time, logging
-from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler
-
-class DirChangeHandler(FileSystemEventHandler):
-    def __init__(self, source_dir, target_file, extension=".csv"):
-        self.source_dir = source_dir
-        self.target_file = target_file
-        self.extension = extension
-        logging.debug(f"DirChangeHandler initialized with source: {source_dir}, target: {target_file}, extension: {extension}")
-
-    def on_any_event(self, event):
-        logging.debug(f"Event detected: {event.event_type} on {event.src_path}")
-        # Handle only specific events
-        if event.event_type  in ("created", "modified", "deleted"):
-            logging.debug(f"Event {event.event_type} trigged.")
-            # Only act on file changes, not directory events
-            if not event.is_directory:
-                converted_data = _convert_directory(self.source_dir, self.extension)
-                try:
-                    logging.info(f"Writing converted data to {self.target_file}.")
-                    with open(self.target_file,"w") as f:
-                        f.writelines(converted_data)
-                except Exception as e:
-                    logging.error(f"Error writing to {self.target_file}: {e}")
 
 # Set up logging
 logging.basicConfig(
@@ -78,6 +54,30 @@ def _convert_directory(path, extension=".csv"):
     logging.debug(f"Directory scanned: '{path}'")
     return json.dumps(results)
 
+def run_watcher(source_path, target_file, extension=".csv", single_run=False):
+    logging.info(f"Watching directory '{source_path}' for changes.")
+    while True:
+        converted_data = _convert_directory(source_path, extension)
+        try:
+            # Check if the converted data is different from the existing file content
+            if os.path.exists(target_file):
+                with open(target_file, "r") as f:
+                    existing_data = f.read()
+                if existing_data == converted_data:
+                    logging.debug("No changes detected. Skipping write.")
+                    time.sleep(5)
+                    continue
+            # Write the new data to the target file
+            logging.info(f"Writing converted data to {target_file}.")
+            with open(target_file,"w") as f:
+                f.writelines(converted_data)
+                if single_run:
+                    logging.info("Single run mode enabled. Exiting after initial conversion.")
+                    return
+        except Exception as e:
+            logging.error(f"Error writing to {target_file}: {e}")
+        time.sleep(5)
+
 def kea_leases_to_json(source_dir, target_file, log_level = "INFO", extension=".csv", single_run=False):
     if not os.path.isdir(source_dir):
         print(f"Directory {source_dir} does not exist.", file=sys.stderr)
@@ -87,22 +87,5 @@ def kea_leases_to_json(source_dir, target_file, log_level = "INFO", extension=".
     logging.getLogger().setLevel(level)
 
     logging.info(f"Kea to JSON watcher conversion tool. Source:'{source_dir}' to '{target_file}'")
-    # Initial run: write output
-    converted_data = _convert_directory(source_dir,extension)
-    with open(target_file, "w") as f:
-        f.write(converted_data)
-    # Set up watchdog
-    if single_run:
-        logging.info("Single run mode enabled. Exiting after initial conversion.")
-        return
-    logging.info(f"Watching directory '{source_dir}' for changes.")
-    event_handler = DirChangeHandler(source_dir, target_file, extension)
-    observer = Observer()
-    observer.schedule(event_handler, source_dir, recursive=False)
-    observer.start()
-    try:
-        while True:
-            time.sleep(1)
-    except KeyboardInterrupt:
-        observer.stop()
-    observer.join()
+    
+    run_watcher(source_dir, target_file, extension, single_run)

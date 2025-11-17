@@ -7,7 +7,6 @@ requires-python = ">=3.7"
 authors = [{ name = "Junior", email = "cjuniorfox@gmail.com" }]
 license = { text = "GNU General Public License v3.0 (GPLv3)" }
 keywords = ["kea", "dhcp", "leases", "json"]
-dependencies = ["watchdog", "pytest"]
 
 [project.urls]
 Homepage = "http://github.com/cjuniorfox/kea-leases-to-json"

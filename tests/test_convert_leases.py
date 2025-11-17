@@ -121,7 +121,7 @@ def test_should_watch_for_file_changes():
             # Modify the CSV file
             with open(csv_path, "a") as f:
                 f.write("host3,2001:db8::2,1234567892\n")
-            time.sleep(2)  # Allow time for the watcher to process the change
+            time.sleep(7)  # Allow time for the watcher to process the change
             # Send KeyboardInterrupt to stop the watcher
             ctypes.pythonapi.PyThreadState_SetAsyncExc(
                 ctypes.c_long(watcher_thread.ident),

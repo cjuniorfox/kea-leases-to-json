@@ -1,5 +1,5 @@
 import argparse
-from kea_leases_to_json.core import kea_leases_to_json
+import kea_leases_to_json
 
 def main():
     parser = argparse.ArgumentParser(description="Convert kea leases to JSON")
@@ -22,6 +22,46 @@ def main():
         default=False,
         help="Run once and exit, useful for testing"
     )
+    parser.add_argument(
+        "--daemonize",
+        action="store_true",
+        default=False,
+        help="Run the process as a daemon in the background, only if not in single-run mode"
+    )
+    parser.add_argument(
+        "--pid",
+        help="PID file path for the daemon process",
+        default="/var/run/kea_leases_to_json.pid"
+    )
+    parser.add_argument(
+        "--version", 
+        "-v",
+        action='version', 
+        version=f'kea_leases_to_json {kea_leases_to_json.get_version()}', 
+        help="Show version and exit"
+    )
     
     args = parser.parse_args()
-    kea_leases_to_json(args.source_dir,args.target_file,args.log_level.upper(), args.extension, args.single_run)
+    if args.daemonize and not args.single_run:
+        from daemonize import Daemonize
+        cmd = lambda: kea_leases_to_json(
+                source_dir= args.source_dir,
+                target_file= args.target_file,
+                log_level= args.log_level.upper(),
+                extension= args.extension,
+                single_run= args.single_run
+            )
+        daemon = Daemonize(
+            app="kea_leases_to_json",
+            pid=args.pid,
+            action=cmd
+        )
+        daemon.start()
+    else:
+        kea_leases_to_json.kea_leases_to_json(
+            source_dir= args.source_dir,
+            target_file= args.target_file,
+            log_level= args.log_level.upper(),
+            extension= args.extension,
+            single_run= args.single_run
+        )
