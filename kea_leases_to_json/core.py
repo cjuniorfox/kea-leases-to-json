@@ -1,25 +1,28 @@
 import json, csv, os, sys, time, logging
 
-# Set up logging
-logging.basicConfig(
-    level=logging.INFO,
-    stream=sys.stderr,
-    format='%(asctime)s %(levelname)s %(message)s'
-)
-
 def _read_file(file_name):
     logging.debug(f"Reading file {file_name}.")
     with open(file_name) as f:
         try:
             data = list(csv.DictReader(f))
         except csv.Error as e:
-            logging.error(f"Error reading CSV file {file_name}: {e}")
+            logging.warning(f"Malformed CSV file {file_name}: {e}. Returning empty data.")
             return []
+    
+    # Check if the CSV has the required columns
+    if data and not all(col in data[0] for col in ['hostname', 'address', 'expire']):
+        missing_cols = [col for col in ['hostname', 'address', 'expire'] if col not in data[0]]
+        logging.warning(f"Cannot read CSV file {file_name}: missing required columns {missing_cols}. Returning empty data.")
+        return []
+    
     mapped = []
     for row in data:
         try:
             if 'hostname' not in row or 'address' not in row or 'expire' not in row:
                 logging.warning(f"Skipping row in {file_name} due to missing fields: {row}")
+                continue
+            if row['address'] is None or row['address'] == "":
+                logging.warning(f"Skipping row in {file_name} due to invalid fields: 'address'")
                 continue
         except KeyError as e:
             logging.error(f"Missing expected key in row: {e}")
@@ -65,17 +68,27 @@ def run_watcher(source_path, target_file, extension=".csv", single_run=False):
                     existing_data = f.read()
                 if existing_data == converted_data:
                     logging.debug("No changes detected. Skipping write.")
+                    if single_run:
+                        logging.info("Single run mode enabled. Exiting after initial check.")
+                        return
                     time.sleep(5)
                     continue
             # Write the new data to the target file
             logging.info(f"Writing converted data to {target_file}.")
             with open(target_file,"w") as f:
                 f.writelines(converted_data)
-                if single_run:
-                    logging.info("Single run mode enabled. Exiting after initial conversion.")
-                    return
+            if single_run:
+                logging.info("Single run mode enabled. Exiting after initial conversion.")
+                return
+        except PermissionError as e:
+            logging.error(f"Permission denied writing to {target_file}: {e}")
+            raise
+        except IOError as e:
+            logging.error(f"I/O error writing to {target_file}: {e}")
+            raise
         except Exception as e:
-            logging.error(f"Error writing to {target_file}: {e}")
+            logging.error(f"Unexpected error writing to {target_file}: {e}")
+            raise
         time.sleep(5)
 
 def kea_leases_to_json(source_dir, target_file, log_level = "INFO", extension=".csv", single_run=False):

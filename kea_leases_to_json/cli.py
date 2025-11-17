@@ -1,5 +1,14 @@
 import argparse
 import kea_leases_to_json
+import logging
+import sys
+
+# Set up logging
+logging.basicConfig(
+    level=logging.INFO,
+    stream=sys.stderr,
+    format='%(asctime)s %(levelname)s %(message)s'
+)
 
 def main():
     parser = argparse.ArgumentParser(description="Convert kea leases to JSON")
@@ -44,13 +53,14 @@ def main():
     args = parser.parse_args()
     if args.daemonize and not args.single_run:
         from daemonize import Daemonize
-        cmd = lambda: kea_leases_to_json(
+        cmd = lambda: kea_leases_to_json.kea_leases_to_json(
                 source_dir= args.source_dir,
                 target_file= args.target_file,
                 log_level= args.log_level.upper(),
                 extension= args.extension,
                 single_run= args.single_run
             )
+        logging.info("Starting in daemonized mode. PID file: %s", args.pid)
         daemon = Daemonize(
             app="kea_leases_to_json",
             pid=args.pid,
