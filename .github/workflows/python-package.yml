@@ -21,7 +21,7 @@ jobs:
     - name: Run tests with coverage
       run: |
         export PYTHONPATH=$PYTHONPATH:$(pwd)
-        pytest --cov=weathergrabber --cov-report=xml --cov-report=term
+        pytest --cov=kea_leases_to_json --cov-report=xml --cov-report=term
     - name: Upload coverage reports to Codecov
       uses: codecov/codecov-action@v5
       with:
