@@ -288,36 +288,52 @@ def test_kea_leases_no_write_permission():
 
 def test_csv_error_handling_logs_and_continues():
     """Test that csv.Error is caught, logged, and doesn't raise an exception"""
-    import logging
-    from unittest.mock import patch, mock_open
+    from unittest.mock import patch, mock_open, MagicMock
+    import csv
     
     with tempfile.TemporaryDirectory() as tmp_dir:
         csv_path = os.path.join(tmp_dir, "malformed.csv")
-        # Create a file that will trigger csv.Error when read
+        # Create a CSV file
         with open(csv_path, "w") as f:
             f.write("hostname,address,expire\n")
-            f.write('"unclosed quote field\n')
+            f.write("host1,192.168.1.1,1234567890\n")
         
         with tempfile.NamedTemporaryFile(mode="w+", delete=False) as tmp_json:
             tmp_json_path = tmp_json.name
         
         try:
-            # Capture log output
-            with patch('logging.warning') as mock_warning:
-                # This should not raise an exception, just log the error
+            # Mock csv.DictReader to raise csv.Error
+            original_dictreader = csv.DictReader
+            
+            def mock_dictreader(*args, **kwargs):
+                raise csv.Error("Simulated CSV parsing error")
+            
+            with patch('logging.warning') as mock_warning, \
+                 patch('csv.DictReader', side_effect=mock_dictreader):
+                # This should not raise an exception, just log the warning
                 kea_leases_to_json(tmp_dir, tmp_json_path, "DEBUG", ".csv", True)
                 
                 # Verify that logging.warning was called with the csv.Error message
                 assert mock_warning.called, "logging.warning should have been called"
-                warning_call = str(mock_warning.call_args)
-                assert "Skipping row" in warning_call
-                assert "due to invalid fields: 'address'" in warning_call
+                warning_calls = [str(call) for call in mock_warning.call_args_list]
+                
+                # Check for malformed CSV warning
+                malformed_logged = any("Malformed CSV file" in call and "malformed.csv" in call for call in warning_calls)
+                assert malformed_logged, "logging.warning should mention malformed CSV file"
+                
+                # Check for "Returning empty data" message
+                returning_empty = any("Returning empty data" in call for call in warning_calls)
+                assert returning_empty, "logging.warning should mention returning empty data"
+                
+                # Check that the csv.Error message is included
+                csv_error_logged = any("Simulated CSV parsing error" in call for call in warning_calls)
+                assert csv_error_logged, "logging.warning should include the csv.Error message"
             
-            # Verify the JSON file was still created (even if empty or partial)
+            # Verify the JSON file was still created with empty data
             with open(tmp_json_path) as f:
                 data = json.load(f)
-                # The function should continue and return empty list for the bad file
-                assert isinstance(data, list)
+                assert isinstance(data, list), "Data should be a list"
+                assert len(data) == 0, "Data should be empty when csv.Error occurs"
         finally:
             os.remove(tmp_json_path)
 
@@ -434,6 +450,95 @@ def test_no_changes_detected_debug_log():
                 debug_calls = [str(call) for call in mock_debug.call_args_list]
                 no_changes_logged = any("No changes detected" in call for call in debug_calls)
                 assert no_changes_logged, "logging.debug should have been called with 'No changes detected'"
+        finally:
+            if os.path.exists(tmp_json_path):
+                os.remove(tmp_json_path)
+
+def test_csv_missing_required_columns():
+    """Test that CSV files with missing required columns are logged and skipped"""
+    from unittest.mock import patch
+    
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        # CSV missing 'address' column
+        csv_path1 = os.path.join(tmp_dir, "missing_address.csv")
+        with open(csv_path1, "w") as f:
+            f.write("hostname,expire\n")
+            f.write("host1,1234567890\n")
+        
+        # CSV missing 'expire' column
+        csv_path2 = os.path.join(tmp_dir, "missing_expire.csv")
+        with open(csv_path2, "w") as f:
+            f.write("hostname,address\n")
+            f.write("host2,192.168.1.1\n")
+        
+        # CSV missing 'hostname' column
+        csv_path3 = os.path.join(tmp_dir, "missing_hostname.csv")
+        with open(csv_path3, "w") as f:
+            f.write("address,expire\n")
+            f.write("192.168.1.2,1234567891\n")
+        
+        with tempfile.NamedTemporaryFile(mode="w+", delete=False) as tmp_json:
+            tmp_json_path = tmp_json.name
+        
+        try:
+            with patch('logging.warning') as mock_warning:
+                kea_leases_to_json(tmp_dir, tmp_json_path, "DEBUG", ".csv", True)
+                
+                # Verify that logging.warning was called for missing columns
+                assert mock_warning.called, "logging.warning should have been called"
+                warning_calls = [str(call) for call in mock_warning.call_args_list]
+                
+                # Check that warnings mention missing required columns
+                missing_cols_logged = any("missing required columns" in call for call in warning_calls)
+                assert missing_cols_logged, "logging.warning should mention missing required columns"
+                
+                # Check that specific columns are mentioned
+                has_address_warning = any("'address'" in call for call in warning_calls)
+                has_expire_warning = any("'expire'" in call for call in warning_calls)
+                has_hostname_warning = any("'hostname'" in call for call in warning_calls)
+                
+                assert has_address_warning or has_expire_warning or has_hostname_warning, \
+                    "At least one missing column should be mentioned in warnings"
+            
+            # Verify the JSON file has no data since all CSVs were invalid
+            with open(tmp_json_path) as f:
+                data = json.load(f)
+                assert len(data) == 0, "No data should be processed from invalid CSV files"
+        finally:
+            if os.path.exists(tmp_json_path):
+                os.remove(tmp_json_path)
+
+def test_csv_missing_required_columns_values():
+    """Test that CSV files with missing required columns are logged and skipped"""
+    from unittest.mock import patch
+    
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        # CSV missing 'address' column
+        csv_path1 = os.path.join(tmp_dir, "missing_address.csv")
+        with open(csv_path1, "w") as f:
+            f.write("hostname,address,expire\n")
+            f.write("host1,,1234567890\n")
+        
+        with tempfile.NamedTemporaryFile(mode="w+", delete=False) as tmp_json:
+            tmp_json_path = tmp_json.name
+        
+        try:
+            with patch('logging.warning') as mock_warning:
+                kea_leases_to_json(tmp_dir, tmp_json_path, "DEBUG", ".csv", True)
+                
+                # Verify that logging.warning was called for missing columns
+                assert mock_warning.called, "logging.warning should have been called"
+                warning_calls = [str(call) for call in mock_warning.call_args_list]
+                
+                # Check that warnings mention missing required columns
+                missing_cols_logged = any("Skipping row in" in call for call in warning_calls)
+                assert missing_cols_logged, "logging.warning should mention skipping rows with invalid fields"
+                
+            
+            # Verify the JSON file has no data since all CSVs were invalid
+            with open(tmp_json_path) as f:
+                data = json.load(f)
+                assert len(data) == 0, "No data should be processed from invalid CSV files"
         finally:
             if os.path.exists(tmp_json_path):
                 os.remove(tmp_json_path)

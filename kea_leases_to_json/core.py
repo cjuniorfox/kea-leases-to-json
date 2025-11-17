@@ -17,16 +17,10 @@ def _read_file(file_name):
     
     mapped = []
     for row in data:
-        try:
-            if 'hostname' not in row or 'address' not in row or 'expire' not in row:
-                logging.warning(f"Skipping row in {file_name} due to missing fields: {row}")
-                continue
-            if row['address'] is None or row['address'] == "":
-                logging.warning(f"Skipping row in {file_name} due to invalid fields: 'address'")
-                continue
-        except KeyError as e:
-            logging.error(f"Missing expected key in row: {e}")
+        if row['address'] is None or row['address'] == "":
+            logging.warning(f"Skipping row in {file_name} due to invalid fields: 'address'")
             continue
+       
         address = row['address']
         if ':' in address:
             address_type = "IPv6"
@@ -82,9 +76,6 @@ def run_watcher(source_path, target_file, extension=".csv", single_run=False):
                 return
         except PermissionError as e:
             logging.error(f"Permission denied writing to {target_file}: {e}")
-            raise
-        except IOError as e:
-            logging.error(f"I/O error writing to {target_file}: {e}")
             raise
         except Exception as e:
             logging.error(f"Unexpected error writing to {target_file}: {e}")
