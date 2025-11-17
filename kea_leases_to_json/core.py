@@ -1,35 +1,4 @@
 import json, csv, os, sys, time, logging
-from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler
-
-class DirChangeHandler(FileSystemEventHandler):
-    def __init__(self, source_dir, target_file, extension=".csv"):
-        self.source_dir = source_dir
-        self.target_file = target_file
-        self.extension = extension
-        logging.debug(f"DirChangeHandler initialized with source: {source_dir}, target: {target_file}, extension: {extension}")
-
-    def on_any_event(self, event):
-        logging.debug(f"Event detected: {event.event_type} on {event.src_path}")
-        # Handle only specific events
-        if event.event_type  in ("created", "modified", "deleted"):
-            logging.debug(f"Event {event.event_type} trigged.")
-            # Only act on file changes, not directory events
-            if not event.is_directory:
-                converted_data = _convert_directory(self.source_dir, self.extension)
-                try:
-                    logging.info(f"Writing converted data to {self.target_file}.")
-                    with open(self.target_file,"w") as f:
-                        f.writelines(converted_data)
-                except Exception as e:
-                    logging.error(f"Error writing to {self.target_file}: {e}")
-
-# Set up logging
-logging.basicConfig(
-    level=logging.INFO,
-    stream=sys.stderr,
-    format='%(asctime)s %(levelname)s %(message)s'
-)
 
 def _read_file(file_name):
     logging.debug(f"Reading file {file_name}.")
@@ -37,17 +6,21 @@ def _read_file(file_name):
         try:
             data = list(csv.DictReader(f))
         except csv.Error as e:
-            logging.error(f"Error reading CSV file {file_name}: {e}")
+            logging.warning(f"Malformed CSV file {file_name}: {e}. Returning empty data.")
             return []
+    
+    # Check if the CSV has the required columns
+    if data and not all(col in data[0] for col in ['hostname', 'address', 'expire']):
+        missing_cols = [col for col in ['hostname', 'address', 'expire'] if col not in data[0]]
+        logging.warning(f"Cannot read CSV file {file_name}: missing required columns {missing_cols}. Returning empty data.")
+        return []
+    
     mapped = []
     for row in data:
-        try:
-            if 'hostname' not in row or 'address' not in row or 'expire' not in row:
-                logging.warning(f"Skipping row in {file_name} due to missing fields: {row}")
-                continue
-        except KeyError as e:
-            logging.error(f"Missing expected key in row: {e}")
+        if row['address'] is None or row['address'] == "":
+            logging.warning(f"Skipping row in {file_name} due to invalid fields: 'address'")
             continue
+       
         address = row['address']
         if ':' in address:
             address_type = "IPv6"
@@ -78,6 +51,37 @@ def _convert_directory(path, extension=".csv"):
     logging.debug(f"Directory scanned: '{path}'")
     return json.dumps(results)
 
+def run_watcher(source_path, target_file, extension=".csv", single_run=False):
+    logging.info(f"Watching directory '{source_path}' for changes.")
+    while True:
+        converted_data = _convert_directory(source_path, extension)
+        try:
+            # Check if the converted data is different from the existing file content
+            if os.path.exists(target_file):
+                with open(target_file, "r") as f:
+                    existing_data = f.read()
+                if existing_data == converted_data:
+                    logging.debug("No changes detected. Skipping write.")
+                    if single_run:
+                        logging.info("Single run mode enabled. Exiting after initial check.")
+                        return
+                    time.sleep(5)
+                    continue
+            # Write the new data to the target file
+            logging.info(f"Writing converted data to {target_file}.")
+            with open(target_file,"w") as f:
+                f.writelines(converted_data)
+            if single_run:
+                logging.info("Single run mode enabled. Exiting after initial conversion.")
+                return
+        except PermissionError as e:
+            logging.error(f"Permission denied writing to {target_file}: {e}")
+            raise
+        except Exception as e:
+            logging.error(f"Unexpected error writing to {target_file}: {e}")
+            raise
+        time.sleep(5)
+
 def kea_leases_to_json(source_dir, target_file, log_level = "INFO", extension=".csv", single_run=False):
     if not os.path.isdir(source_dir):
         print(f"Directory {source_dir} does not exist.", file=sys.stderr)
@@ -87,22 +91,5 @@ def kea_leases_to_json(source_dir, target_file, log_level = "INFO", extension=".
     logging.getLogger().setLevel(level)
 
     logging.info(f"Kea to JSON watcher conversion tool. Source:'{source_dir}' to '{target_file}'")
-    # Initial run: write output
-    converted_data = _convert_directory(source_dir,extension)
-    with open(target_file, "w") as f:
-        f.write(converted_data)
-    # Set up watchdog
-    if single_run:
-        logging.info("Single run mode enabled. Exiting after initial conversion.")
-        return
-    logging.info(f"Watching directory '{source_dir}' for changes.")
-    event_handler = DirChangeHandler(source_dir, target_file, extension)
-    observer = Observer()
-    observer.schedule(event_handler, source_dir, recursive=False)
-    observer.start()
-    try:
-        while True:
-            time.sleep(1)
-    except KeyboardInterrupt:
-        observer.stop()
-    observer.join()
+    
+    run_watcher(source_dir, target_file, extension, single_run)
